@@ -1,0 +1,10 @@
+{
+  "name": "लोक सेवा आयोग",
+  "description": "A modern school educational platform with offline study notes, timer-based MCQ quizzes, video player, AI-powered study chatbot, and progress tracking.",
+  "requestFramePermissions": [
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

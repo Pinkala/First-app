@@ -1,0 +1,115 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,300..900;1,300..900&family=Space+Grotesk:wght@300..700&family=JetBrains+Mono:wght@300..800&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Space Grotesk", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+/* Custom Neo-Brutalist Bold Typography Utility Classes */
+.card-bold {
+  background-color: #ffffff;
+  border: 2.5px solid #0f172a;
+  box-shadow: 4px 4px 0px 0px #0f172a;
+  border-radius: 16px;
+  transition: all 0.2s ease;
+}
+
+.card-bold-interactive:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 5px 5px 0px 0px #0f172a;
+}
+
+.card-bold-interactive:active {
+  transform: translate(2px, 2px);
+  box-shadow: 2px 2px 0px 0px #0f172a;
+}
+
+.btn-bold-primary {
+  background-color: #fbbf24; /* High impact Amber-400 */
+  color: #0f172a;
+  border: 2.5px solid #0f172a;
+  box-shadow: 4px 4px 0px 0px #0f172a;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: -0.025em;
+  font-family: "Space Grotesk", sans-serif;
+  transition: all 0.1s ease;
+}
+
+.btn-bold-primary:hover {
+  background-color: #f59e0b; /* Amber-500 */
+}
+
+.btn-bold-primary:active {
+  transform: translate(2px, 2px);
+  box-shadow: 2px 2px 0px 0px #0f172a;
+}
+
+.btn-bold-secondary {
+  background-color: #ffffff;
+  color: #0f172a;
+  border: 2.5px solid #0f172a;
+  box-shadow: 4px 4px 0px 0px #0f172a;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: -0.025em;
+  font-family: "Space Grotesk", sans-serif;
+  transition: all 0.1s ease;
+}
+
+.btn-bold-secondary:hover {
+  background-color: #f1f5f9;
+}
+
+.btn-bold-secondary:active {
+  transform: translate(2px, 2px);
+  box-shadow: 2px 2px 0px 0px #0f172a;
+}
+
+.badge-bold {
+  border: 1.5px solid #0f172a;
+  font-weight: 800;
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.05em;
+}
+
+/* Custom scrollbars inside our smartphone simulator screen */
+::-webkit-scrollbar {
+  width: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.25);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.45);
+}
+
+@keyframes wave {
+  0% { transform: rotate(0deg); }
+  20% { transform: rotate(14deg); }
+  40% { transform: rotate(-4deg); }
+  60% { transform: rotate(10deg); }
+  80% { transform: rotate(-2deg); }
+  100% { transform: rotate(0deg); }
+}
+
+.animate-wave {
+  animation: wave 2.2s infinite;
+  transform-origin: 70% 70%;
+}
+
+/* Base custom resets */
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #0b0f19;
+  font-family: var(--font-sans);
+  overflow: hidden;
+}
