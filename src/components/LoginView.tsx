@@ -2,6 +2,16 @@ import React, { useState } from "react";
 import { LogIn, UserPlus, GraduationCap, Globe, Mail, Lock, User, Sparkles } from "lucide-react";
 import { UserProfile } from "../types";
 import { motion } from "motion/react";
+import { 
+  auth, 
+  db, 
+  googleProvider, 
+  signInWithPopup, 
+  doc, 
+  getDoc, 
+  setDoc 
+} from "../lib/firebase";
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from "firebase/auth";
 
 interface LoginViewProps {
   onLoginSuccess: (profile: UserProfile) => void;
@@ -17,7 +27,7 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
 
@@ -32,36 +42,92 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
     }
 
     setIsLoading(true);
-    setTimeout(() => {
+    try {
+      if (isRegister) {
+        const result = await createUserWithEmailAndPassword(auth, email, password);
+        const user = result.user;
+        const studentProfile: UserProfile = {
+          uid: user.uid,
+          name: name,
+          email: email,
+          profilePic: `https://api.dicebear.com/7.x/pixel-art/svg?seed=${encodeURIComponent(email)}`,
+          schoolName: schoolName || "Nations High School",
+          preferredLanguage: language,
+          dailyGoalMinutes: 20
+        };
+        await setDoc(doc(db, "users", user.uid), studentProfile);
+        onLoginSuccess(studentProfile);
+      } else {
+        const result = await signInWithEmailAndPassword(auth, email, password);
+        const user = result.user;
+        const userRef = doc(db, "users", user.uid);
+        const userSnap = await getDoc(userRef);
+        
+        let studentProfile: UserProfile;
+        if (userSnap.exists()) {
+          studentProfile = userSnap.data() as UserProfile;
+        } else {
+          studentProfile = {
+            uid: user.uid,
+            name: email.split("@")[0].charAt(0).toUpperCase() + email.split("@")[0].slice(1),
+            email: email,
+            profilePic: `https://api.dicebear.com/7.x/pixel-art/svg?seed=${encodeURIComponent(email)}`,
+            schoolName: "Nations High School",
+            preferredLanguage: language,
+            dailyGoalMinutes: 20
+          };
+          await setDoc(userRef, studentProfile);
+        }
+        onLoginSuccess(studentProfile);
+      }
+    } catch (e: any) {
+      console.error("Firebase Auth Error:", e);
+      let msg = e.message;
+      if (e.code === "auth/invalid-credential" || e.code === "auth/wrong-password" || e.code === "auth/user-not-found") {
+        msg = "Invalid email or password combination.";
+      } else if (e.code === "auth/email-already-in-use") {
+        msg = "This email is already registered.";
+      } else if (e.code === "auth/weak-password") {
+        msg = "Password should be at least 6 characters.";
+      }
+      setError(msg);
+    } finally {
       setIsLoading(false);
-      const studentProfile: UserProfile = {
-        uid: "stu-" + Math.random().toString(36).substring(2, 7),
-        name: isRegister ? name : (email.split("@")[0].charAt(0).toUpperCase() + email.split("@")[0].slice(1)),
-        email: email,
-        profilePic: `https://api.dicebear.com/7.x/pixel-art/svg?seed=${encodeURIComponent(email)}`,
-        schoolName: schoolName || "Nations High School",
-        preferredLanguage: language,
-        dailyGoalMinutes: 20
-      };
-      onLoginSuccess(studentProfile);
-    }, 1200);
+    }
   };
 
-  const handleGoogleSignIn = () => {
+  const handleGoogleSignIn = async () => {
     setIsLoading(true);
-    setTimeout(() => {
-      setIsLoading(false);
-      const studentProfile: UserProfile = {
-        uid: "google-stu-1",
-        name: "Priscilla Adhikari",
-        email: "priscilla.adhikari@gmail.com",
-        profilePic: "https://api.dicebear.com/7.x/pixel-art/svg?seed=Priscilla",
-        schoolName: "Mount Everest International Academy",
-        preferredLanguage: language,
-        dailyGoalMinutes: 30
-      };
+    setError("");
+    try {
+      const result = await signInWithPopup(auth, googleProvider);
+      const user = result.user;
+      
+      const userRef = doc(db, "users", user.uid);
+      const userSnap = await getDoc(userRef);
+      
+      let studentProfile: UserProfile;
+      if (userSnap.exists()) {
+        studentProfile = userSnap.data() as UserProfile;
+      } else {
+        studentProfile = {
+          uid: user.uid,
+          name: user.displayName || "Google Scholar",
+          email: user.email || "",
+          profilePic: user.photoURL || `https://api.dicebear.com/7.x/pixel-art/svg?seed=${encodeURIComponent(user.email || 'Google')}`,
+          schoolName: "Mount Everest International Academy",
+          preferredLanguage: language,
+          dailyGoalMinutes: 30
+        };
+        await setDoc(userRef, studentProfile);
+      }
       onLoginSuccess(studentProfile);
-    }, 1400);
+    } catch (e: any) {
+      console.error("Google Auth Error:", e);
+      setError(e.message || "Failed to authenticate with Google.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (

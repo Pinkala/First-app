@@ -1,0 +1,285 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "The student profile details document.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "The unique user id (auth.uid)."
+        },
+        "name": {
+          "type": "string",
+          "description": "Student's full name."
+        },
+        "email": {
+          "type": "string",
+          "description": "Student's secure email address."
+        },
+        "profilePic": {
+          "type": "string",
+          "description": "Student profile picture avatar URL."
+        },
+        "schoolName": {
+          "type": "string",
+          "description": "Name of the school are attending."
+        },
+        "preferredLanguage": {
+          "type": "string",
+          "enum": ["English", "Nepali"],
+          "description": "Preferred study and navigation language."
+        },
+        "dailyGoalMinutes": {
+          "type": "number",
+          "description": "Daily study goal time in minutes."
+        }
+      },
+      "required": ["uid", "name", "email"]
+    },
+    "UserProgress": {
+      "title": "UserProgress",
+      "description": "A student's ongoing score, study streaks, read counts, and unlocked badges.",
+      "type": "object",
+      "properties": {
+        "score": {
+          "type": "number",
+          "description": "Current learning points/score score."
+        },
+        "studyTimeMinutes": {
+          "type": "number",
+          "description": "Accumulated study time in minutes."
+        },
+        "completedQuizzesCount": {
+          "type": "number",
+          "description": "Total number of completed tests."
+        },
+        "completedNotesCount": {
+          "type": "number",
+          "description": "Total number of read revision notes."
+        },
+        "streakDays": {
+          "type": "number",
+          "description": "Active learning streak day count."
+        },
+        "lastStudyDate": {
+          "type": "string",
+          "description": "Most recent study date string YYYY-MM-DD to verify streaks."
+        },
+        "badges": {
+          "type": "array",
+          "description": "Array of earned badge maps."
+        },
+        "bookmarkedNoteIds": {
+          "type": "array",
+          "description": "IDs of saved/bookmarked revision notes."
+        },
+        "favoriteVideoIds": {
+          "type": "array",
+          "description": "IDs of favorite educational videos."
+        },
+        "watchedVideoIds": {
+          "type": "array",
+          "description": "IDs of already watched learning videos."
+        }
+      },
+      "required": ["score", "studyTimeMinutes"]
+    },
+    "CustomNote": {
+      "title": "CustomNote",
+      "description": "Revision note uploaded via admin or custom backend.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "ID of static note."
+        },
+        "title": {
+          "type": "string",
+          "description": "Main header title of the note."
+        },
+        "category": {
+          "type": "string",
+          "enum": ["Science", "Math", "Computer", "English", "GK"],
+          "description": "Study curriculum category."
+        },
+        "content": {
+          "type": "string",
+          "description": "Content of the study note in markdown parser style."
+        },
+        "downloadUrl": {
+          "type": "string",
+          "description": "Optional offline PDF format download URL link."
+        },
+        "readingTimeMinutes": {
+          "type": "number",
+          "description": "Estimated average reading time."
+        }
+      },
+      "required": ["id", "title", "category", "content", "readingTimeMinutes"]
+    },
+    "CustomQuiz": {
+      "title": "CustomQuiz",
+      "description": "Custom MCQ question created dynamically via tutor or admin console.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "The unique ID of the quiz."
+        },
+        "category": {
+          "type": "string",
+          "description": "The curriculum category."
+        },
+        "difficulty": {
+          "type": "string",
+          "description": "Easy, Medium, or Hard difficulty."
+        },
+        "question": {
+          "type": "string",
+          "description": "Text description of the quiz query."
+        },
+        "options": {
+          "type": "array",
+          "description": "List of 4 strings representing response alternatives."
+        },
+        "correctIndex": {
+          "type": "number",
+          "description": "0-indexed integer of correct alternative."
+        },
+        "explanation": {
+          "type": "string",
+          "description": "Helpful educational explanation context."
+        }
+      },
+      "required": ["id", "category", "question", "options", "correctIndex"]
+    },
+    "CustomVideo": {
+      "title": "CustomVideo",
+      "description": "Admin uploaded educational video session.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "ID of video."
+        },
+        "title": {
+          "type": "string",
+          "description": "Video main title descriptor."
+        },
+        "category": {
+          "type": "string",
+          "description": "Underlying curriculum subject tag."
+        },
+        "youtubeId": {
+          "type": "string",
+          "description": "The 11 characters YouTube video reference identifier."
+        },
+        "duration": {
+          "type": "string",
+          "description": "Run length string, e.g., mm:ss."
+        },
+        "thumbnailUrl": {
+          "type": "string",
+          "description": "Static image preview splash asset URL."
+        },
+        "description": {
+          "type": "string",
+          "description": "Full contextual brief summary."
+        }
+      },
+      "required": ["id", "title", "category", "youtubeId"]
+    },
+    "StudentActivity": {
+      "title": "StudentActivity",
+      "description": "An action log documenting revision reads, watches, or quiz practice sessions.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique log index ID."
+        },
+        "userId": {
+          "type": "string",
+          "description": "UID reference of student initiating."
+        },
+        "type": {
+          "type": "string",
+          "enum": ["quiz", "note", "video"],
+          "description": "Type of learning event."
+        },
+        "title": {
+          "type": "string",
+          "description": "Content title description string."
+        },
+        "meta": {
+          "type": "string",
+          "description": "Metadata descriptor (e.g. '5 min Study Session')."
+        },
+        "timestamp": {
+          "type": "string",
+          "description": "Short legible time string representation (e.g. '09:41 AM')."
+        }
+      },
+      "required": ["id", "userId", "type", "title", "timestamp"]
+    },
+    "LeaderboardEntry": {
+      "title": "LeaderboardEntry",
+      "description": "Public leaderboard high score record.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "UID of the student."
+        },
+        "name": {
+          "type": "string",
+          "description": "Student's avatar display name."
+        },
+        "avatar": {
+          "type": "string",
+          "description": "Student avatar pixel picture URL."
+        },
+        "score": {
+          "type": "number",
+          "description": "Aggregated overall quiz and learning points."
+        },
+        "quizzesCompleted": {
+          "type": "number",
+          "description": "Total count of successfully practice exams completed."
+        }
+      },
+      "required": ["uid", "name", "score"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Main student profiles catalog."
+    },
+    "/users/{userId}/progress/records": {
+      "schema": "UserProgress",
+      "description": "Personalized study metrics and badges subcollection."
+    },
+    "/custom_notes/{noteId}": {
+      "schema": "CustomNote",
+      "description": "Admin curated study and syllabus notes."
+    },
+    "/custom_quizzes/{quizId}": {
+      "schema": "CustomQuiz",
+      "description": "Custom learning evaluation mock exams."
+    },
+    "/custom_videos/{videoId}": {
+      "schema": "CustomVideo",
+      "description": "Curriculum visual lessons roster."
+    },
+    "/student_activities/{activityId}": {
+      "schema": "StudentActivity",
+      "description": "Recent learning logs of students."
+    },
+    "/leaderboard/{userId}": {
+      "schema": "LeaderboardEntry",
+      "description": "Public points ranking records."
+    }
+  }
+}

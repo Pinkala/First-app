@@ -62,6 +62,9 @@ export interface UserProgress {
   streakDays: number;
   lastStudyDate?: string; // YYYY-MM-DD
   badges: Badge[];
+  bookmarkedNoteIds?: string[];
+  favoriteVideoIds?: string[];
+  watchedVideoIds?: string[];
 }
 
 export interface Badge {

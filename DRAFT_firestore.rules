@@ -1,0 +1,166 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 1. Global safety net catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Phase 3: Primitive Definitions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && (request.auth.token.email_verified == true || request.auth.token.firebase.sign_in_provider == 'google.com');
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == 'kushwahamp264@gmail.com' || 
+        request.auth.token.email.endsWith('@studyhub.edu')
+      );
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Entity Validations (Pillar 2: Validation Blueprints)
+    
+    function isValidUser(data) {
+      return data.uid == request.auth.uid
+        && data.name is string && data.name.size() <= 150
+        && data.email is string && data.email.size() <= 150
+        && (!('profilePic' in data) || (data.profilePic is string && data.profilePic.size() <= 512))
+        && (!('schoolName' in data) || (data.schoolName is string && data.schoolName.size() <= 150))
+        && (!('preferredLanguage' in data) || (data.preferredLanguage == 'English' || data.preferredLanguage == 'Nepali'))
+        && (!('dailyGoalMinutes' in data) || (data.dailyGoalMinutes is int || data.dailyGoalMinutes is float));
+    }
+
+    function isValidProgress(data) {
+      return data.score is int && data.score >= 0 && data.score <= 100000
+        && data.studyTimeMinutes is int && data.studyTimeMinutes >= 0 && data.studyTimeMinutes <= 100000
+        && (!('completedQuizzesCount' in data) || (data.completedQuizzesCount is int && data.completedQuizzesCount >= 0))
+        && (!('completedNotesCount' in data) || (data.completedNotesCount is int && data.completedNotesCount >= 0))
+        && (!('streakDays' in data) || (data.streakDays is int && data.streakDays >= 0))
+        && (!('lastStudyDate' in data) || (data.lastStudyDate is string && data.lastStudyDate.size() <= 20))
+        && (!('badges' in data) || (data.badges is list && data.badges.size() <= 20))
+        && (!('bookmarkedNoteIds' in data) || (data.bookmarkedNoteIds is list && data.bookmarkedNoteIds.size() <= 100))
+        && (!('favoriteVideoIds' in data) || (data.favoriteVideoIds is list && data.favoriteVideoIds.size() <= 100))
+        && (!('watchedVideoIds' in data) || (data.watchedVideoIds is list && data.watchedVideoIds.size() <= 100));
+    }
+
+    function isValidNote(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.title is string && data.title.size() <= 150
+        && (data.category == 'Science' || data.category == 'Math' || data.category == 'Computer' || data.category == 'English' || data.category == 'GK')
+        && data.content is string && data.content.size() <= 20000
+        && data.readingTimeMinutes is int && data.readingTimeMinutes >= 1 && data.readingTimeMinutes <= 120
+        && (!('downloadUrl' in data) || (data.downloadUrl is string && data.downloadUrl.size() <= 512));
+    }
+
+    function isValidQuiz(data) {
+      return data.id is string && data.id.size() <= 128
+        && (data.category == 'Science' || data.category == 'Math' || data.category == 'Computer' || data.category == 'English' || data.category == 'GK')
+        && data.difficulty is string && data.difficulty.size() <= 20
+        && data.question is string && data.question.size() <= 500
+        && data.options is list && data.options.size() == 4
+        && data.options[0] is string && data.options[0].size() <= 150
+        && data.correctIndex is int && data.correctIndex >= 0 && data.correctIndex <= 3
+        && (!('explanation' in data) || (data.explanation is string && data.explanation.size() <= 1000));
+    }
+
+    function isValidVideo(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.title is string && data.title.size() <= 150
+        && (data.category == 'Science' || data.category == 'Math' || data.category == 'Computer' || data.category == 'English' || data.category == 'GK')
+        && data.youtubeId is string && data.youtubeId.size() <= 20
+        && data.duration is string && data.duration.size() <= 10
+        && data.thumbnailUrl is string && data.thumbnailUrl.size() <= 512
+        && (!('description' in data) || (data.description is string && data.description.size() <= 1000));
+    }
+
+    function isValidActivity(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.userId == request.auth.uid
+        && (data.type == 'quiz' || data.type == 'note' || data.type == 'video')
+        && data.title is string && data.title.size() <= 150
+        && data.meta is string && data.meta.size() <= 100
+        && data.timestamp is string && data.timestamp.size() <= 50;
+    }
+
+    function isValidLeaderboard(data) {
+      return data.uid == request.auth.uid
+        && data.name is string && data.name.size() <= 150
+        && data.avatar is string && data.avatar.size() <= 512
+        && data.score is int && data.score >= 0
+        && (!('quizzesCompleted' in data) || (data.quizzesCompleted is int && data.quizzesCompleted >= 0));
+    }
+
+    // 2. Users collection
+    match /users/{userId} {
+      allow get: if isSignedIn();
+      allow list: if isVerifiedUser() && resource.data.uid == request.auth.uid;
+      allow create, update: if isOwner(userId) && isValidUser(incoming());
+      allow delete: if false;
+
+      // Progress subcollection
+      match /progress/{documentId} {
+        allow get: if isSignedIn();
+        allow list: if isVerifiedUser() && resource.data.userId == request.auth.uid;
+        allow create, update: if isOwner(userId) && isValidProgress(incoming());
+        allow delete: if false;
+      }
+    }
+
+    // 3. Custom Notes collection
+    match /custom_notes/{noteId} {
+      allow get, list: if isSignedIn();
+      allow create, update: if isAdmin() && isValidNote(incoming());
+      allow delete: if isAdmin();
+    }
+
+    // 4. Custom Quizzes collection
+    match /custom_quizzes/{quizId} {
+      allow get, list: if isSignedIn();
+      allow create, update: if (isAdmin() || isVerifiedUser()) && isValidQuiz(incoming());
+      allow delete: if isAdmin();
+    }
+
+    // 5. Custom Videos collection
+    match /custom_videos/{videoId} {
+      allow get, list: if isSignedIn();
+      allow create, update: if isAdmin() && isValidVideo(incoming());
+      allow delete: if isAdmin();
+    }
+
+    // 6. Student Activities
+    match /student_activities/{activityId} {
+      allow get: if isSignedIn();
+      allow list: if isVerifiedUser() && resource.data.userId == request.auth.uid;
+      allow create: if isVerifiedUser() && isValidActivity(incoming());
+      allow update, delete: if false;
+    }
+
+    // 7. Leaderboard
+    match /leaderboard/{userId} {
+      allow get, list: if isSignedIn();
+      allow create, update: if isOwner(userId) && isValidLeaderboard(incoming());
+      allow delete: if false;
+    }
+  }
+}

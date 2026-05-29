@@ -31,6 +31,23 @@ import AdminPanel from "./components/AdminPanel";
 import StudentProfile from "./components/StudentProfile";
 import SettingsView from "./components/SettingsView";
 
+// Firebase Imports
+import {
+  db,
+  auth,
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+  collection,
+  onSnapshot,
+  query,
+  where,
+  OperationType,
+  handleFirestoreError
+} from "./lib/firebase";
+import { onAuthStateChanged } from "firebase/auth";
+
 export default function App() {
   // Application phase control states
   const [showSplash, setShowSplash] = useState(true);
@@ -60,38 +77,165 @@ export default function App() {
   // Filtering shortcuts
   const [activeNoteCategoryFilter, setActiveNoteCategoryFilter] = useState<SubjectCategory | null>(null);
 
-  // Synchronize state from API server of admin custom notes on mount
+  // 1. Synchronize Auth State & user specific documents
   useEffect(() => {
-    async function syncCustomData() {
-      try {
-        const res = await fetch("/api/custom-data");
-        if (res.ok) {
-          const data = await res.json();
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      if (currentUser) {
+        try {
+          const userRef = doc(db, "users", currentUser.uid);
+          const userSnap = await getDoc(userRef);
+          let loadedProfile: UserProfile;
           
-          if (data.customNotes && data.customNotes.length > 0) {
-            setNotes((prev) => [...data.customNotes, ...prev]);
+          if (userSnap.exists()) {
+            loadedProfile = userSnap.data() as UserProfile;
+          } else {
+            // Create user profile if missing
+            loadedProfile = {
+              uid: currentUser.uid,
+              name: currentUser.displayName || currentUser.email?.split("@")[0] || "Student",
+              email: currentUser.email || "",
+              profilePic: currentUser.photoURL || `https://api.dicebear.com/7.x/pixel-art/svg?seed=${encodeURIComponent(currentUser.email || currentUser.uid)}`,
+              schoolName: "Mount Everest International Academy",
+              preferredLanguage: "English",
+              dailyGoalMinutes: 30
+            };
+            await setDoc(userRef, loadedProfile);
           }
-          if (data.customQuizzes && data.customQuizzes.length > 0) {
-            setQuizzes((prev) => [...data.customQuizzes, ...prev]);
+          setProfile(loadedProfile);
+
+          // Sync student progress
+          const progressRef = doc(db, "users", currentUser.uid, "progress", "main");
+          const progressSnap = await getDoc(progressRef);
+          if (progressSnap.exists()) {
+            const data = progressSnap.data() as UserProgress;
+            setUserProgress(data);
+            setBookmarkedNoteIds(data.bookmarkedNoteIds || []);
+            setFavoriteVideoIds(data.favoriteVideoIds || []);
+            setWatchedVideoIds(data.watchedVideoIds || []);
+          } else {
+            const initialProgress: UserProgress = {
+              score: 180,
+              studyTimeMinutes: 5,
+              completedQuizzesCount: 2,
+              completedNotesCount: 1,
+              streakDays: 2,
+              badges: [STUDY_BADGES[0], STUDY_BADGES[1]],
+              bookmarkedNoteIds: [],
+              favoriteVideoIds: [],
+              watchedVideoIds: []
+            };
+            await setDoc(progressRef, initialProgress);
+            setUserProgress(initialProgress);
           }
-          if (data.customVideos && data.customVideos.length > 0) {
-            setVideos((prev) => [...data.customVideos, ...prev]);
-          }
-          if (data.studentActivities && data.studentActivities.length > 0) {
-            setRecentActivities(data.studentActivities);
-          }
+        } catch (error) {
+          console.error("Failed to sync profile/progress: ", error);
         }
-      } catch (err) {
-        console.warn("API server loading deferred. Relying on baseline datasets.", err);
+      } else {
+        setProfile(null);
       }
-    }
-    syncCustomData();
+    });
+
+    return () => unsubscribe();
   }, []);
+
+  // 2. Sync Custom Notes from Firestore
+  useEffect(() => {
+    if (!profile) return;
+    const q = query(collection(db, "custom_notes"));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const custom: StudyNote[] = [];
+      snapshot.forEach((doc) => {
+        custom.push(doc.data() as StudyNote);
+      });
+      setNotes(() => {
+        const unique = [...custom];
+        INITIAL_STUDY_NOTES.forEach(note => {
+          if (!unique.some(u => u.id === note.id)) {
+            unique.push(note);
+          }
+        });
+        return unique;
+      });
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, "custom_notes");
+    });
+    return () => unsubscribe();
+  }, [profile]);
+
+  // 3. Sync Custom Quizzes from Firestore
+  useEffect(() => {
+    if (!profile) return;
+    const q = query(collection(db, "custom_quizzes"));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const custom: MCQQuestion[] = [];
+      snapshot.forEach((doc) => {
+        custom.push(doc.data() as MCQQuestion);
+      });
+      setQuizzes(() => {
+        const unique = [...custom];
+        INITIAL_MCQS.forEach(item => {
+          if (!unique.some(u => u.id === item.id)) {
+            unique.push(item);
+          }
+        });
+        return unique;
+      });
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, "custom_quizzes");
+    });
+    return () => unsubscribe();
+  }, [profile]);
+
+  // 4. Sync Custom Videos from Firestore
+  useEffect(() => {
+    if (!profile) return;
+    const q = query(collection(db, "custom_videos"));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const custom: EducationalVideo[] = [];
+      snapshot.forEach((doc) => {
+        custom.push(doc.data() as EducationalVideo);
+      });
+      setVideos(() => {
+        const unique = [...custom];
+        INITIAL_VIDEOS.forEach(item => {
+          if (!unique.some(u => u.id === item.id)) {
+            unique.push(item);
+          }
+        });
+        return unique;
+      });
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, "custom_videos");
+    });
+    return () => unsubscribe();
+  }, [profile]);
+
+  // 5. Sync Student Activities from Firestore
+  useEffect(() => {
+    if (!profile) return;
+    const q = query(
+      collection(db, "student_activities"), 
+      where("userId", "==", profile.uid)
+    );
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const list: SavedActivity[] = [];
+      snapshot.forEach((doc) => {
+        list.push(doc.data() as SavedActivity);
+      });
+      list.sort((a, b) => b.id.localeCompare(a.id));
+      setRecentActivities(list);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, "student_activities");
+    });
+    return () => unsubscribe();
+  }, [profile]);
 
   // Sync user completed action of saving logs to backend
   const logStudentActivity = async (title: string, meta: string, type: "quiz" | "note" | "video") => {
-    const act: SavedActivity = {
+    if (!profile) return;
+    const act: SavedActivity & { userId: string } = {
       id: "act-" + Date.now(),
+      userId: profile.uid,
       type,
       title,
       meta,
@@ -101,11 +245,7 @@ export default function App() {
     setRecentActivities((prev) => [act, ...prev].slice(0, 30));
 
     try {
-      await fetch("/api/activities", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(act)
-      });
+      await setDoc(doc(db, "student_activities", act.id), act);
     } catch (e) {
       console.warn("Storage syncing is maintained locally.", e);
     }
@@ -115,6 +255,7 @@ export default function App() {
   const handleScoreMutation = async (pointsEarned: number) => {
     if (!profile) return;
     
+    let nextProgress: UserProgress | null = null;
     setUserProgress((prev) => {
       const incrementedScore = prev.score + pointsEarned;
       const completedNotesCount = prev.completedNotesCount;
@@ -134,46 +275,77 @@ export default function App() {
         unlocked.push(noteDevourerBadge);
       }
 
-      return {
+      nextProgress = {
         ...prev,
         score: incrementedScore,
         completedQuizzesCount: quizzesIncremented,
         badges: unlocked
       };
+      
+      return nextProgress;
     });
 
-    // Notify backend
+    // Notify backend/Firestore
+    if (nextProgress) {
+      try {
+        await setDoc(doc(db, "users", profile.uid, "progress", "main"), nextProgress);
+      } catch (e) {
+        console.warn("Firestore progress update error: ", e);
+      }
+    }
+
     try {
-      await fetch("/api/update-leaderboard", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          uid: profile.uid,
-          name: profile.name,
-          score: userProgress.score + pointsEarned
-        })
+      const currentScore = nextProgress ? (nextProgress as UserProgress).score : userProgress.score + pointsEarned;
+      const totalQuizzes = nextProgress ? (nextProgress as UserProgress).completedQuizzesCount : userProgress.completedQuizzesCount + 1;
+      await setDoc(doc(db, "leaderboard", profile.uid), {
+        uid: profile.uid,
+        name: profile.name,
+        avatar: profile.profilePic || `https://api.dicebear.com/7.x/pixel-art/svg?seed=${encodeURIComponent(profile.email)}`,
+        score: currentScore,
+        quizzesCompleted: totalQuizzes
       });
     } catch (e) {
-      console.warn(e);
+      console.warn("Leaderboard sync error: ", e);
     }
   };
 
-  const logReadModule = (noteId: string, title: string) => {
+  const logReadModule = async (noteId: string, title: string) => {
+    if (!profile) return;
+    let nextProgress: UserProgress | null = null;
     setUserProgress((prev) => {
       const updatedNotesCount = prev.completedNotesCount + 1;
       const studyTime = prev.studyTimeMinutes + 5; // Adds static 5 minutes per note read
-      return {
+      nextProgress = {
         ...prev,
         completedNotesCount: updatedNotesCount,
         studyTimeMinutes: studyTime
       };
+      return nextProgress;
     });
+
+    if (nextProgress) {
+      try {
+        await setDoc(doc(db, "users", profile.uid, "progress", "main"), nextProgress);
+      } catch (e) {
+        console.warn("Read note progress update error: ", e);
+      }
+    }
     logStudentActivity(`Read Notes: ${title}`, "5 min Study Session", "note");
   };
 
-  const logWatchedLesson = (videoId: string, title: string) => {
+  const logWatchedLesson = async (videoId: string, title: string) => {
+    if (!profile) return;
     if (!watchedVideoIds.includes(videoId)) {
-      setWatchedVideoIds((prev) => [...prev, videoId]);
+      const nextWatched = [...watchedVideoIds, videoId];
+      setWatchedVideoIds(nextWatched);
+      try {
+        await setDoc(doc(db, "users", profile.uid, "progress", "main"), {
+          ...userProgress,
+          watchedVideoIds: nextWatched
+        });
+      } catch (e) {
+        console.warn("Video progress update error: ", e);
+      }
     }
     logStudentActivity(`Watched Video: ${title}`, "Lesson Player Session", "video");
   };
@@ -181,60 +353,36 @@ export default function App() {
   // Injections for Admin custom content persistence
   const handleInsertCustomNote = async (newNote: StudyNote): Promise<boolean> => {
     try {
-      const res = await fetch("/api/custom-data/note", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newNote)
-      });
-      if (res.ok) {
-        setNotes((prev) => [newNote, ...prev]);
-        logStudentActivity(`Admin added note: ${newNote.title}`, "Curriculum Update", "note");
-        return true;
-      }
+      await setDoc(doc(db, "custom_notes", newNote.id), newNote);
+      logStudentActivity(`Admin added note: ${newNote.title}`, "Curriculum Update", "note");
+      return true;
     } catch (e) {
-      console.error(e);
+      console.error("Firestore Insert Custom Note Error:", e);
+      handleFirestoreError(e, OperationType.CREATE, `custom_notes/${newNote.id}`);
     }
-    // Fallback if offline
-    setNotes((prev) => [newNote, ...prev]);
-    return true;
+    return false;
   };
 
   const handleInsertCustomQuiz = async (newQuiz: MCQQuestion): Promise<boolean> => {
     try {
-      const res = await fetch("/api/custom-data/quiz", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newQuiz)
-      });
-      if (res.ok) {
-        setQuizzes((prev) => [newQuiz, ...prev]);
-        return true;
-      }
+      await setDoc(doc(db, "custom_quizzes", newQuiz.id), newQuiz);
+      return true;
     } catch (e) {
-      console.error(e);
+      console.error("Firestore Insert Custom Quiz Error:", e);
+      handleFirestoreError(e, OperationType.CREATE, `custom_quizzes/${newQuiz.id}`);
     }
-    // Fallback if offline
-    setQuizzes((prev) => [newQuiz, ...prev]);
-    return true;
+    return false;
   };
 
   const handleInsertCustomVideo = async (newVideo: EducationalVideo): Promise<boolean> => {
     try {
-      const res = await fetch("/api/custom-data/video", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newVideo)
-      });
-      if (res.ok) {
-        setVideos((prev) => [newVideo, ...prev]);
-        return true;
-      }
+      await setDoc(doc(db, "custom_videos", newVideo.id), newVideo);
+      return true;
     } catch (e) {
-      console.error(e);
+      console.error("Firestore Insert Custom Video Error:", e);
+      handleFirestoreError(e, OperationType.CREATE, `custom_videos/${newVideo.id}`);
     }
-    // Fallback if offline
-    setVideos((prev) => [newVideo, ...prev]);
-    return true;
+    return false;
   };
 
   const handleTriggerAISuggestion = async (category: SubjectCategory): Promise<MCQQuestion | null> => {
@@ -261,13 +409,19 @@ export default function App() {
             explanation: data.question.explanation
           };
           
+          let nextProgress: UserProgress | null = null;
           setUserProgress((prev) => {
             const list = [...prev.badges];
             if (!list.some(b => b.id === "badge-ai-help")) {
               list.push(STUDY_BADGES[4]); // Curious Minds badge unlocked for AI usage!
             }
-            return { ...prev, badges: list };
+            nextProgress = { ...prev, badges: list };
+            return nextProgress;
           });
+
+          if (profile && nextProgress) {
+            setDoc(doc(db, "users", profile.uid, "progress", "main"), nextProgress).catch(console.warn);
+          }
 
           return generatedQuiz;
         }
@@ -310,18 +464,26 @@ export default function App() {
 
   // Safety net reset
   const handleResetProgressData = () => {
-    setUserProgress({
+    const fresh: UserProgress = {
       score: 0,
       studyTimeMinutes: 0,
       completedQuizzesCount: 0,
       completedNotesCount: 0,
       streakDays: 1,
-      badges: [STUDY_BADGES[0]]
-    });
+      badges: [STUDY_BADGES[0]],
+      bookmarkedNoteIds: [],
+      favoriteVideoIds: [],
+      watchedVideoIds: []
+    };
+    setUserProgress(fresh);
     setBookmarkedNoteIds([]);
     setFavoriteVideoIds([]);
     setWatchedVideoIds([]);
     setRecentActivities([]);
+
+    if (profile) {
+      setDoc(doc(db, "users", profile.uid, "progress", "main"), fresh).catch(console.error);
+    }
   };
 
   return (
@@ -410,9 +572,15 @@ export default function App() {
                       notes={notes}
                       bookmarkedIds={bookmarkedNoteIds}
                       onToggleBookmark={(id) => {
-                        setBookmarkedNoteIds((prev) => 
-                          prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
-                        );
+                        const nextBookmarks = bookmarkedNoteIds.includes(id) 
+                          ? bookmarkedNoteIds.filter(x => x !== id) 
+                          : [...bookmarkedNoteIds, id];
+                        setBookmarkedNoteIds(nextBookmarks);
+                        if (profile) {
+                          updateDoc(doc(db, "users", profile.uid, "progress", "main"), {
+                            bookmarkedNoteIds: nextBookmarks
+                          }).catch(console.warn);
+                        }
                       }}
                       onLoggedRead={logReadModule}
                       selectedCategoryName={activeNoteCategoryFilter}
@@ -438,9 +606,15 @@ export default function App() {
                       favoriteIds={favoriteVideoIds}
                       watchHistory={watchedVideoIds}
                       onToggleFavoriteVideo={(id) => {
-                        setFavoriteVideoIds((prev) => 
-                          prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
-                        );
+                        const nextFavorites = favoriteVideoIds.includes(id) 
+                          ? favoriteVideoIds.filter(x => x !== id) 
+                          : [...favoriteVideoIds, id];
+                        setFavoriteVideoIds(nextFavorites);
+                        if (profile) {
+                          updateDoc(doc(db, "users", profile.uid, "progress", "main"), {
+                            favoriteVideoIds: nextFavorites
+                          }).catch(console.warn);
+                        }
                       }}
                       onLoggedWatch={logWatchedLesson}
                     />
@@ -478,6 +652,11 @@ export default function App() {
                       onChangeLanguage={(lang) => {
                         const updated = { ...profile, preferredLanguage: lang };
                         setProfile(updated);
+                        if (profile) {
+                          updateDoc(doc(db, "users", profile.uid), {
+                            preferredLanguage: lang
+                          }).catch(console.warn);
+                        }
                       }}
                       onResetProgress={handleResetProgressData}
                     />
